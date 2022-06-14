@@ -71,17 +71,24 @@ namespace ignition_platform
 
     public:
         std::shared_ptr<ignition::transport::Node> ign_node_ptr_;
-        ignition::transport::v11::Node::Publisher command_twist_pub_;
+        ignition::transport::v11::Node::Publisher ign_thrust_left_pub_;
+        ignition::transport::v11::Node::Publisher ign_thrust_right_pub_;
+        ignition::transport::v11::Node::Publisher ign_rot_left_pub_;
+        ignition::transport::v11::Node::Publisher ign_rot_right_pub_;
 
     private:
         std::string name_space_;
 
-        const std::string &ign_topic_command_twist_ = "/cmd_vel";
+        const std::string &ign_topic_command_thrust_left_ = "/joint/left_engine_propeller_joint/cmd_thrust";
+        const std::string &ign_topic_command_thrust_right_ = "/joint/right_engine_propeller_joint/cmd_thrust";
+        const std::string &ign_topic_command_rot_left_ = "/left/thruster/joint/cmd_pos";
+        const std::string &ign_topic_command_rot_right_ = "/right/thruster/joint/cmd_pos";
         const std::string &ign_topic_sensor_pose_ = "/pose";
         const std::string &ign_topic_sensor_odometry_ = "/odometry";
 
     public:
-        void sendTwistMsg(const geometry_msgs::msg::Twist &msg);
+        void sendThrustMsg(const std_msgs::msg::Float64 &left_thrust, const std_msgs::msg::Float64 &right_thrust);
+        void sendRotationMsg(const std_msgs::msg::Float64 &left_rotation, const std_msgs::msg::Float64 &right_rotation);
 
         void setPoseCallback(poseCallbackType callback);
         void setOdometryCallback(odometryCallbackType callback);

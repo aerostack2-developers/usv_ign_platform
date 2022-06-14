@@ -1,0 +1,7 @@
+/**:
+  ros__parameters:
+    yaw_rate_limit : 1.5707963
+    K_yaw_rate: 4.0
+    K_yaw_force : 15.0
+    GainThrust: 50.0
+    maximum_thrust : 1000.0

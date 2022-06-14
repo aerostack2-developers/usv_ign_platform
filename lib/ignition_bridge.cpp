@@ -55,8 +55,17 @@ namespace ignition_platform
         ign_node_ptr_ = std::make_shared<ignition::transport::Node>();
 
         // Initialize publishers
-        command_twist_pub_ = ign_node_ptr_->Advertise<ignition::msgs::Twist>(
-            name_space + ign_topic_command_twist_);
+        ign_thrust_left_pub_ = ign_node_ptr_->Advertise<ignition::msgs::Double>(
+            "model" + name_space + ign_topic_command_thrust_left_);
+
+        ign_thrust_right_pub_ = ign_node_ptr_->Advertise<ignition::msgs::Double>(
+            "model" + name_space + ign_topic_command_thrust_right_);
+
+        ign_rot_left_pub_ = ign_node_ptr_->Advertise<ignition::msgs::Double>(
+            name_space + ign_topic_command_rot_left_);
+
+        ign_rot_right_pub_ = ign_node_ptr_->Advertise<ignition::msgs::Double>(
+            name_space + ign_topic_command_rot_right_);
 
         // Initialize subscribers
         ign_node_ptr_->Subscribe(
@@ -70,11 +79,25 @@ namespace ignition_platform
         return;
     };
 
-    void IgnitionBridge::sendTwistMsg(const geometry_msgs::msg::Twist &ros_twist_msg)
+    void IgnitionBridge::sendThrustMsg(const std_msgs::msg::Float64 &left_thrust, const std_msgs::msg::Float64 &right_thrust)
     {
-        ignition::msgs::Twist ign_twist_msg;
-        ros_ign_bridge::convert_ros_to_ign(ros_twist_msg, ign_twist_msg);
-        command_twist_pub_.Publish(ign_twist_msg);
+        ignition::msgs::Double ign_left_msg;
+        ignition::msgs::Double ign_right_msg;
+        ros_ign_bridge::convert_ros_to_ign(left_thrust, ign_left_msg);
+        ros_ign_bridge::convert_ros_to_ign(right_thrust, ign_right_msg);
+        ign_thrust_left_pub_.Publish(ign_left_msg);
+        ign_thrust_right_pub_.Publish(ign_right_msg);
+        return;
+    };
+
+    void IgnitionBridge::sendRotationMsg(const std_msgs::msg::Float64 &left_rotation, const std_msgs::msg::Float64 &right_rotation)
+    {
+        ignition::msgs::Double ign_left_msg;
+        ignition::msgs::Double ign_right_msg;
+        ros_ign_bridge::convert_ros_to_ign(left_rotation, ign_left_msg);
+        ros_ign_bridge::convert_ros_to_ign(right_rotation, ign_right_msg);
+        ign_rot_left_pub_.Publish(ign_left_msg);
+        ign_rot_right_pub_.Publish(ign_right_msg);
         return;
     };
 

@@ -61,8 +61,8 @@ else()
 endif()
 
 set(SOURCE_CPP_FILES 
-  lib/${NODE_NAME}.cpp
   lib/ignition_bridge.cpp
+  src/${NODE_NAME}.cpp
 )
 set(HEADER_HPP_FILES
   include/${NODE_NAME}/${NODE_NAME}.hpp

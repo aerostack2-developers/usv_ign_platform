@@ -50,6 +50,7 @@
 // #include <math.h>
 #include <as2_core/core_functions.hpp>
 #include <as2_core/aerial_platform.hpp>
+#include <as2_core/frame_utils/frame_utils.hpp>
 #include <as2_core/sensor.hpp>
 #include <as2_core/names/topics.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
@@ -61,7 +62,7 @@
 
 #include "ignition_bridge.hpp"
 
-#define CMD_FREQ 10  // miliseconds
+#define CMD_FREQ 10 // miliseconds
 
 namespace ignition_platform
 {
@@ -72,12 +73,6 @@ namespace ignition_platform
     public:
         USVIgnitionPlatform();
         ~USVIgnitionPlatform(){};
-
-    public:
-    rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr twist_command_sub_;
-
-    rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr left_thrust_pub_;
-    rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr right_thrust_pub_;
 
     public:
         void configureSensors() override;
@@ -102,19 +97,47 @@ namespace ignition_platform
         static std::unordered_map<std::string, as2::sensors::Sensor<sensor_msgs::msg::PointCloud2>> callbacks_point_cloud_;
         static void pointCloudCallback(const sensor_msgs::msg::PointCloud2 &msg, const std::string &sensor_name);
 
-
     private:
         std::shared_ptr<IgnitionBridge> ignition_bridge_;
+
         static bool odometry_info_received_;
+        bool parameters_read;
         as2_msgs::msg::ControlMode control_in_;
-        static double yaw_;
+
         double yaw_rate_limit_ = M_PI_2;
-        void speedController(const Eigen::Vector3d& vel_flu);
-        void PublishUSVCommands(const Eigen::Vector2d &motor_thrust_cmd);
+        double K_yaw_rate_ = 10;
+        double K_yaw_force_ = 10;
+        double GainThrust_ = 20;
+        double maximum_thrust_ = 1000.0;
+
+        static geometry_msgs::msg::Quaternion self_orientation_;
+        Eigen::Vector2d motor_thrust_cmd_;
+
+        std::vector<std::string> parameters_to_read_ = {
+            "yaw_rate_limit",
+            "K_yaw_rate",
+            "K_yaw_force",
+            "GainThrust",
+            "maximum_thrust",
+        };
+
+        std::unordered_map<std::string, double> parameters_ = {
+            {"yaw_rate_limit", 1.5707963},
+            {"K_yaw_rate", 4.0},
+            {"K_yaw_force", 15.0},
+            {"GainThrust", 50.0},
+            {"maximum_thrust", 1000.0},
+        };
 
     private:
-        void resetCommandTwistMsg();
-        Eigen::Vector3d convertENUtoFLU(const float yaw_angle, Eigen::Vector3d &enu_vec);
+        void declareParameters();
+        void updateGains();
+        void resetCommandMsg();
+
+        Eigen::Vector2d speedController(const Eigen::Vector3d &vel_flu);
+        void sendUSVMsg();
+
+        rcl_interfaces::msg::SetParametersResult parametersCallback(const std::vector<rclcpp::Parameter> &parameters);
     };
 }
 
