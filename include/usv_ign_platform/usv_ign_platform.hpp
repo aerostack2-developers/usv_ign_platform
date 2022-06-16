@@ -110,8 +110,14 @@ namespace ignition_platform
         double GainThrust_ = 20;
         double maximum_thrust_ = 1000.0;
 
+        float antiwindup_cte_ = 1.0f;
+        double alpha_ = 0.1;
+        Eigen::Vector3d yaw_ang_mat_ = Eigen::Vector3d::Identity();
+        double yaw_accum_error_ = 0.0;
+
         static geometry_msgs::msg::Quaternion self_orientation_;
-        Eigen::Vector2d motor_thrust_cmd_;
+        Eigen::Vector2d motor_thrust_cmd_ = Eigen::Vector2d::Zero();
+        Eigen::Vector2d motor_pos_cmd_ = Eigen::Vector2d::Zero();
 
         std::vector<std::string> parameters_to_read_ = {
             "yaw_rate_limit",
@@ -119,12 +125,22 @@ namespace ignition_platform
             "K_yaw_force",
             "GainThrust",
             "maximum_thrust",
+            "antiwindup_cte",
+            "alpha",
+            "yaw_speed_controller.Kp",
+            "yaw_speed_controller.Ki",
+            "yaw_speed_controller.Kd",
         };
 
         std::unordered_map<std::string, double> parameters_ = {
-            {"yaw_rate_limit", 1.5707963},
+            {"antiwindup_cte", 5.0},
+            {"alpha", 0.1},
+            {"yaw_speed_controller.Kp", 1.0},
+            {"yaw_speed_controller.Ki", 0.0},
+            {"yaw_speed_controller.Kd", 0.0},
+            {"yaw_rate_limit", 0.78539816339744830962},
             {"K_yaw_rate", 4.0},
-            {"K_yaw_force", 15.0},
+            {"K_yaw_force", 10.0},
             {"GainThrust", 50.0},
             {"maximum_thrust", 1000.0},
         };
@@ -134,7 +150,12 @@ namespace ignition_platform
         void updateGains();
         void resetCommandMsg();
 
-        Eigen::Vector2d speedController(const Eigen::Vector3d &vel_flu);
+        void speedController(const Eigen::Vector3d &vel_flu);
+
+        double computeYawSpeed(
+            const double &yaw_angle_error,
+            const double &dt);
+        
         void sendUSVMsg();
 
         rcl_interfaces::msg::SetParametersResult parametersCallback(const std::vector<rclcpp::Parameter> &parameters);

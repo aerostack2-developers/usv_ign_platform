@@ -146,6 +146,47 @@ namespace ignition_platform
     return;
   };
 
+  double angleMinError(
+    const double &yaw_angle_state,
+    const double &yaw_angle_ref)
+  {
+    // Wrap angles to [-pi, pi]
+    
+    double yaw_angle_ref_wrap = yaw_angle_ref;
+    if (yaw_angle_ref_wrap < -M_PI)
+    {
+        yaw_angle_ref_wrap += 2.0 * M_PI;
+    }
+    else if (yaw_angle_ref_wrap > M_PI)
+    {
+        yaw_angle_ref_wrap -= 2.0 * M_PI;
+    }
+
+    double yaw_angle_state_wrap = yaw_angle_state;
+    if (yaw_angle_state_wrap < -M_PI)
+    {
+        yaw_angle_state_wrap += 2.0 * M_PI;
+    }
+    else if (yaw_angle_state_wrap > M_PI)
+    {
+        yaw_angle_state_wrap -= 2.0 * M_PI;
+    }
+    
+    // Compute yaw angle error in rad
+    double yaw_angle_diff = yaw_angle_ref_wrap - yaw_angle_state;
+
+    // Wrap angle error to [-pi, pi]
+    if (yaw_angle_diff < -M_PI)
+    {
+        return yaw_angle_diff + 2.0 * M_PI;
+    }
+    else if (yaw_angle_diff > M_PI)
+    {
+        return yaw_angle_diff - 2.0 * M_PI;
+    }
+    return yaw_angle_diff;
+  }
+
   bool USVIgnitionPlatform::ownSendCommand()
   {
     if (!parameters_read)
@@ -176,7 +217,8 @@ namespace ignition_platform
 
       Eigen::Vector3d twist_lineal_flu = as2::FrameUtils::convertENUtoFLU(self_orientation_, twist_lineal_enu);
 
-      motor_thrust_cmd_ = speedController(twist_lineal_flu);
+      RCLCPP_INFO(this->get_logger(), "Vel flu: %f, %f", twist_lineal_flu.x(), twist_lineal_flu.y());
+      speedController(twist_lineal_flu);
       sendUSVMsg();
     }
     else if (control_in_.reference_frame == as2_msgs::msg::ControlMode::BODY_FLU_FRAME)
@@ -184,46 +226,106 @@ namespace ignition_platform
       Eigen::Vector3d twist_lineal_flu = Eigen::Vector3d(command_twist_msg_.twist.linear.x,
                                                          command_twist_msg_.twist.linear.y,
                                                          command_twist_msg_.twist.linear.z);
-      motor_thrust_cmd_ = speedController(twist_lineal_flu);
+      speedController(twist_lineal_flu);
       sendUSVMsg();
     }
     return true;
   };
 
-  Eigen::Vector2d USVIgnitionPlatform::speedController(const Eigen::Vector3d &vel_flu)
+  // Return yaw speed in rad/s to reach a reference yaw angle
+  double USVIgnitionPlatform::computeYawSpeed(
+        const double &yaw_angle_error,
+        const double &dt)
   {
-    Eigen::Vector2d motor_thrust_cmd;
 
-    // Convert speed (m/s) to force (N)
-    // If speed norm < 0.1, stay still
-    Eigen::Vector2d desired_force = Eigen::Vector2d(0, 0);
+    // Compute the proportional error (yaw error)
+    double yaw_p_error = yaw_angle_error;
 
+    // Store the error for the next iteration
+    static double last_yaw_p_error_ = yaw_p_error;
+    static double filtered_d_yaw_error_ = yaw_p_error;
+
+    // Compute the error of the derivative filtered with a first order filter (yaw derivate)
+    double yaw_error_incr = (yaw_p_error - last_yaw_p_error_);
+    filtered_d_yaw_error_ = alpha_ * yaw_error_incr + (1.0 - alpha_) * filtered_d_yaw_error_;
+
+    // Update de acumulated error
+    yaw_accum_error_ += yaw_p_error * dt;
+
+    // Compute anti-windup. Limit integral contribution
+    float antiwindup_value = antiwindup_cte_ / yaw_ang_mat_[1];
+    yaw_accum_error_ = (yaw_accum_error_ >  antiwindup_value) ?  antiwindup_value : yaw_accum_error_;
+    yaw_accum_error_ = (yaw_accum_error_ < -antiwindup_value) ? -antiwindup_value : yaw_accum_error_;
+
+    // Compute desired acceleration
+    return yaw_ang_mat_[0] * yaw_p_error + yaw_ang_mat_[1] * yaw_accum_error_ + yaw_ang_mat_[2] * filtered_d_yaw_error_;
+  };
+
+  void USVIgnitionPlatform::speedController(const Eigen::Vector3d &vel_flu)
+  {
+    rclcpp::Time current_time = this->now();
+    static rclcpp::Time last_time_ = current_time;
+    double dt = (current_time - last_time_).nanoseconds() / 1.0e9;
+    last_time_ = current_time;
+
+    Eigen::Vector2d motor_thrust_cmd = Eigen::Vector2d::Zero();
+    Eigen::Vector2d motor_pos_cmd = Eigen::Vector2d::Zero();
+    double desired_torque = 0.0;
+
+    // If speed norm > 0.5, move with desired yaw
     // Get yaw rate (rad/s)
-    double desired_yaw_rate = command_twist_msg_.twist.angular.z;
-    if (vel_flu.norm() > 0.1 && vel_flu.y() < 0.5)
+    double desired_yaw_flu = as2::FrameUtils::getVector2DAngle(vel_flu.x(), vel_flu.y());
+
+    // double desired_yaw_rate = command_twist_msg_.twist.angular.z;
+    
+    if (vel_flu.norm() > 1.0)
     {
-      desired_force = Eigen::Vector2d(vel_flu.x(), vel_flu.y()) * GainThrust_;
-      desired_yaw_rate *= K_yaw_rate_;
+      // Get yaw rate (rad/s)
+      double desired_yaw_rate = K_yaw_rate_ * computeYawSpeed(desired_yaw_flu, dt);
+      RCLCPP_INFO(this->get_logger(), "desired_yaw_flu: %f", desired_yaw_flu);
+
+      // Convert yaw rate (rad/s) to torque (Nm)
+      desired_torque = K_yaw_force_ * desired_yaw_rate;
+
+      // Move if velocity in y axis is greater than 0.5 m/s. Otherwise, just rotate
+      if (abs(vel_flu.y()) < 0.5)
+      {
+        Eigen::Vector2d desired_force = Eigen::Vector2d(vel_flu.x(), vel_flu.y()) * GainThrust_;
+        motor_thrust_cmd << desired_force.x() / 2.0f, desired_force.x() / 2.0f;
+      }
     }
-    // if (vel_flu.norm() > 0.1)
+    else if (vel_flu.norm() > 0.1)
+    {
+      Eigen::Vector2d desired_force = Eigen::Vector2d(vel_flu.x(), vel_flu.y()) * GainThrust_;
+      motor_thrust_cmd << desired_force.x() / 2.0f, desired_force.x() / 2.0f;
+
+      motor_pos_cmd.x() = desired_yaw_flu;
+      motor_pos_cmd.y() = desired_yaw_flu;
+    }
+
+    // double desired_yaw_rate = command_twist_msg_.twist.angular.z;
+
+    // If speed norm < 0.1, stay still
+    // If vellocity in y axis > 0.5, just rotate
+    // Else, move
+    // if (vel_flu.norm() > 1.0)
     // {
-    //   RCLCPP_INFO(this->get_logger(), "Moving");
-    //   desired_force = Eigen::Vector2d(vel_flu.x(), vel_flu.y()) * GainThrust_;
+    //   if (vel_flu.y() < 0.5)
+    //   {
+    //     // Convert speed (m/s) to force (N)
+    //     Eigen::Vector2d desired_force = Eigen::Vector2d(vel_flu.x(), vel_flu.y()) * GainThrust_;
+    //     motor_thrust_cmd << desired_force.x() / 2.0f, desired_force.x() / 2.0f;
+    //   }
+      
+      // // Get yaw rate (rad/s)
+      // double desired_yaw_flu = as2::FrameUtils::getVector2DAngle(vel_flu.x(), vel_flu.y());
+      // double desired_yaw_rate = K_yaw_rate_ * computeYawSpeed(desired_yaw_flu, dt);
 
-    //   // Compute yaw rate (rad/s)
-    //   desired_yaw_rate = K_yaw_rate_ * as2::FrameUtils::getVector2DAngle(vel_flu.x(), vel_flu.y());
+      // // Convert yaw rate (rad/s) to torque (Nm)
+      // desired_torque = K_yaw_force_ * desired_yaw_rate;
+
+      // RCLCPP_INFO(this->get_logger(), "Desired_yaw_rate: %f", desired_yaw_rate);
     // }
-    // else
-    // {
-    //   RCLCPP_INFO(this->get_logger(), "Rotating");
-    //   // Get yaw rate (rad/s) for rotate while staying still
-    //   desired_yaw_rate = command_twist_msg_.twist.angular.z;
-    // }
-
-    motor_thrust_cmd << desired_force.x() / 2.0f, desired_force.x() / 2.0f;
-
-    // Convert yaw rate (rad/s) to torque (Nm)
-    double desired_torque = K_yaw_force_ * desired_yaw_rate;
 
     RCLCPP_INFO(this->get_logger(), "Desired motor force: %f, %f", motor_thrust_cmd.x(), motor_thrust_cmd.y());
     RCLCPP_INFO(this->get_logger(), "Desired yaw torque: %f", desired_torque);
@@ -238,10 +340,12 @@ namespace ignition_platform
     motor_thrust_cmd.y() =
         std::min(std::max((double)motor_thrust_cmd.y(), -maximum_thrust_), maximum_thrust_);
 
-    RCLCPP_INFO(this->get_logger(), "Send motor force: %f, %f", motor_thrust_cmd.x(), motor_thrust_cmd.y());
-    RCLCPP_INFO(this->get_logger(), "\n");
+    motor_thrust_cmd_ = motor_thrust_cmd;
+    motor_pos_cmd_ = motor_pos_cmd;
 
-    return motor_thrust_cmd;
+    RCLCPP_INFO(this->get_logger(), "Send motor force: %f, %f", motor_thrust_cmd.x(), motor_thrust_cmd.y());
+    RCLCPP_INFO(this->get_logger(), "Send motor rot: %f, %f", motor_pos_cmd.x(), motor_pos_cmd.y());
+    RCLCPP_INFO(this->get_logger(), "\n");
   }
 
   void USVIgnitionPlatform::sendUSVMsg()
@@ -253,6 +357,14 @@ namespace ignition_platform
     right_thrust_msg.data = motor_thrust_cmd_[1];
 
     ignition_bridge_->sendThrustMsg(left_thrust_msg, right_thrust_msg);
+
+    std_msgs::msg::Float64 left_pos_msg;
+    std_msgs::msg::Float64 right_pos_msg;
+
+    left_pos_msg.data = motor_pos_cmd_[0];
+    right_pos_msg.data = motor_pos_cmd_[1];
+
+    ignition_bridge_->sendRotationMsg(left_pos_msg, right_pos_msg);
   }
 
   bool USVIgnitionPlatform::ownSetArmingState(bool state)
@@ -340,6 +452,13 @@ namespace ignition_platform
     K_yaw_force_ = parameters_["K_yaw_force"];
     GainThrust_ = parameters_["GainThrust"];
     maximum_thrust_ = parameters_["maximum_thrust"];
+
+    antiwindup_cte_ = parameters_["antiwindup_cte"];
+    alpha_ = parameters_["alpha"];
+    yaw_ang_mat_ = Vector3d(
+                      parameters_["yaw_speed_controller.Kp"],
+                      parameters_["yaw_speed_controller.Ki"],
+                      parameters_["yaw_speed_controller.Kd"]);
     return;
   }
 
