@@ -125,28 +125,28 @@ namespace ignition_platform
             "K_yaw_force",
             "GainThrust",
             "maximum_thrust",
-            "antiwindup_cte",
             "alpha",
+            "antiwindup_cte",
             "yaw_speed_controller.Kp",
             "yaw_speed_controller.Ki",
             "yaw_speed_controller.Kd",
         };
 
         std::unordered_map<std::string, double> parameters_ = {
-            {"antiwindup_cte", 5.0},
+            {"yaw_rate_limit", 0.78539816339744830962},
+            {"K_yaw_rate", 4.0},
+            {"K_yaw_force", 15.0},
+            {"GainThrust", 50.0},
+            {"maximum_thrust", 2000.0},
             {"alpha", 0.1},
+            {"antiwindup_cte", 5.0},
             {"yaw_speed_controller.Kp", 1.0},
             {"yaw_speed_controller.Ki", 0.0},
             {"yaw_speed_controller.Kd", 0.0},
-            {"yaw_rate_limit", 0.78539816339744830962},
-            {"K_yaw_rate", 4.0},
-            {"K_yaw_force", 10.0},
-            {"GainThrust", 50.0},
-            {"maximum_thrust", 1000.0},
         };
 
     private:
-        void declareParameters();
+        void ownDeclareParameters();
         void updateGains();
         void resetCommandMsg();
 

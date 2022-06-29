@@ -50,16 +50,17 @@ namespace ignition_platform
 
   USVIgnitionPlatform::USVIgnitionPlatform() : as2::AerialPlatform()
   {
-    this->declare_parameter<std::string>("sensors");
+    
     ignition_bridge_ = std::make_shared<IgnitionBridge>(this->get_namespace());
-
-    this->configureSensors();
+    updateGains();
 
     parameters_read = false;
     static auto parameters_callback_handle_ = this->add_on_set_parameters_callback(
         std::bind(&USVIgnitionPlatform::parametersCallback, this, std::placeholders::_1));
 
-    declareParameters();
+    this->ownDeclareParameters();
+
+    configureSensors();
 
     // Timer to send command
     static auto timer_commands_ =
@@ -217,7 +218,6 @@ namespace ignition_platform
 
       Eigen::Vector3d twist_lineal_flu = as2::FrameUtils::convertENUtoFLU(self_orientation_, twist_lineal_enu);
 
-      RCLCPP_INFO(this->get_logger(), "Vel flu: %f, %f", twist_lineal_flu.x(), twist_lineal_flu.y());
       speedController(twist_lineal_flu);
       sendUSVMsg();
     }
@@ -282,13 +282,13 @@ namespace ignition_platform
     {
       // Get yaw rate (rad/s)
       double desired_yaw_rate = K_yaw_rate_ * computeYawSpeed(desired_yaw_flu, dt);
-      RCLCPP_INFO(this->get_logger(), "desired_yaw_flu: %f", desired_yaw_flu);
+      // RCLCPP_INFO(this->get_logger(), "desired_yaw_flu: %f", desired_yaw_flu);
 
       // Convert yaw rate (rad/s) to torque (Nm)
       desired_torque = K_yaw_force_ * desired_yaw_rate;
 
-      // Move if velocity in y axis is greater than 0.5 m/s. Otherwise, just rotate
-      if (abs(vel_flu.y()) < 0.5)
+      // Move if velocity in y axis is less than 1.0 m/s. Otherwise, just rotate
+      if (abs(vel_flu.y()) < 1.0)
       {
         Eigen::Vector2d desired_force = Eigen::Vector2d(vel_flu.x(), vel_flu.y()) * GainThrust_;
         motor_thrust_cmd << desired_force.x() / 2.0f, desired_force.x() / 2.0f;
@@ -327,12 +327,12 @@ namespace ignition_platform
       // RCLCPP_INFO(this->get_logger(), "Desired_yaw_rate: %f", desired_yaw_rate);
     // }
 
-    RCLCPP_INFO(this->get_logger(), "Desired motor force: %f, %f", motor_thrust_cmd.x(), motor_thrust_cmd.y());
-    RCLCPP_INFO(this->get_logger(), "Desired yaw torque: %f", desired_torque);
+    // RCLCPP_INFO(this->get_logger(), "Desired motor force: %f, %f", motor_thrust_cmd.x(), motor_thrust_cmd.y());
+    // RCLCPP_INFO(this->get_logger(), "Desired yaw torque: %f", desired_torque);
 
     motor_thrust_cmd += Eigen::Vector2d(-desired_torque / 2.0f, desired_torque / 2.0f);
 
-    RCLCPP_INFO(this->get_logger(), "Desired motor force rot: %f, %f", motor_thrust_cmd.x(), motor_thrust_cmd.y());
+    // RCLCPP_INFO(this->get_logger(), "Desired motor force rot: %f, %f", motor_thrust_cmd.x(), motor_thrust_cmd.y());
 
     // Saturate max/min force
     motor_thrust_cmd.x() =
@@ -343,9 +343,9 @@ namespace ignition_platform
     motor_thrust_cmd_ = motor_thrust_cmd;
     motor_pos_cmd_ = motor_pos_cmd;
 
-    RCLCPP_INFO(this->get_logger(), "Send motor force: %f, %f", motor_thrust_cmd.x(), motor_thrust_cmd.y());
-    RCLCPP_INFO(this->get_logger(), "Send motor rot: %f, %f", motor_pos_cmd.x(), motor_pos_cmd.y());
-    RCLCPP_INFO(this->get_logger(), "\n");
+    // RCLCPP_INFO(this->get_logger(), "Send motor force: %f, %f", motor_thrust_cmd.x(), motor_thrust_cmd.y());
+    // RCLCPP_INFO(this->get_logger(), "Send motor rot: %f, %f", motor_pos_cmd.x(), motor_pos_cmd.y());
+    // RCLCPP_INFO(this->get_logger(), "\n");
   }
 
   void USVIgnitionPlatform::sendUSVMsg()
@@ -400,11 +400,15 @@ namespace ignition_platform
     return false;
   };
 
-  void USVIgnitionPlatform::declareParameters()
+  void USVIgnitionPlatform::ownDeclareParameters()
   {
-    for (auto &param : parameters_)
+    // this->declare_parameter<std::string>("sensors"); // TODO
+    this->declare_parameter("sensors");    
+
+    std::vector<std::string> params_to_declare(parameters_to_read_);
+    for (int i=0; i<params_to_declare.size(); i++)
     {
-      this->declare_parameter(param.first, param.second);
+      this->declare_parameter(params_to_declare[i]);
     }
     return;
   };
@@ -435,6 +439,10 @@ namespace ignition_platform
           parameters_read = true;
         }
       }
+      else if (param.get_name() == "sensors")
+      {
+        continue;
+      }
       else
       {
         RCLCPP_WARN(this->get_logger(), "Parameter %s not defined in controller params", param.get_name().c_str());
@@ -447,14 +455,15 @@ namespace ignition_platform
 
   void USVIgnitionPlatform::updateGains()
   {
+    RCLCPP_INFO(this->get_logger(), "Update gains");
     yaw_rate_limit_ = parameters_["yaw_rate_limit"];
     K_yaw_rate_ = parameters_["K_yaw_rate"];
     K_yaw_force_ = parameters_["K_yaw_force"];
     GainThrust_ = parameters_["GainThrust"];
     maximum_thrust_ = parameters_["maximum_thrust"];
 
-    antiwindup_cte_ = parameters_["antiwindup_cte"];
     alpha_ = parameters_["alpha"];
+    antiwindup_cte_ = parameters_["antiwindup_cte"];
     yaw_ang_mat_ = Vector3d(
                       parameters_["yaw_speed_controller.Kp"],
                       parameters_["yaw_speed_controller.Ki"],
