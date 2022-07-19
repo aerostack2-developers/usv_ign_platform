@@ -402,13 +402,12 @@ namespace ignition_platform
 
   void USVIgnitionPlatform::ownDeclareParameters()
   {
-    // this->declare_parameter<std::string>("sensors"); // TODO
-    this->declare_parameter("sensors");    
+    this->declare_parameter<std::string>("sensors");
 
     std::vector<std::string> params_to_declare(parameters_to_read_);
     for (int i=0; i<params_to_declare.size(); i++)
     {
-      this->declare_parameter(params_to_declare[i]);
+      this->declare_parameter<double>(params_to_declare[i]);
     }
     return;
   };
