@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 set(PROJECT_NAME usv_ign_platform)
 set(NODE_NAME usv_ign_platform)
-project(${PROJECT_NAME} VERSION 0.1.0)
+project(${PROJECT_NAME} VERSION 0.2.0)
 
 # Default to C++17
 if(NOT CMAKE_CXX_STANDARD)
