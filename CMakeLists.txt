@@ -21,11 +21,11 @@ set(PROJECT_DEPENDENCIES
   geometry_msgs
   nav_msgs
   Eigen3
-  pluginlib
   as2_core
   ros_ign_bridge
   ros_ign_gazebo
-  tf2
+  tf2_geometry_msgs
+  image_transport
 )
 
 foreach(DEPENDENCY ${PROJECT_DEPENDENCIES})
