@@ -454,7 +454,7 @@ namespace ignition_platform
 
   void USVIgnitionPlatform::updateGains()
   {
-    RCLCPP_INFO(this->get_logger(), "Update gains");
+    RCLCPP_DEBUG(this->get_logger(), "Update gains");
     yaw_rate_limit_ = parameters_["yaw_rate_limit"];
     K_yaw_rate_ = parameters_["K_yaw_rate"];
     K_yaw_force_ = parameters_["K_yaw_force"];
