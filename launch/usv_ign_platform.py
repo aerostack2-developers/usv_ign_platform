@@ -32,8 +32,7 @@ def get_platform_node(context, *args, **kwargs):
             LaunchConfiguration('controller_config_file'),
             {"control_modes_file": LaunchConfiguration('control_modes_file'),
             "sensors": get_sensors(drone_namespace)
-            }],
-        remappings=[("sensor_measurements/odometry", "self_localization/odom")]
+            }]
     )
     return [node]
 

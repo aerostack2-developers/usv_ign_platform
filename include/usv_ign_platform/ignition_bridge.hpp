@@ -55,7 +55,7 @@
 namespace ignition_platform
 {
     typedef void (*poseCallbackType)(const geometry_msgs::msg::PoseStamped &msg);
-    typedef void (*odometryCallbackType)(const nav_msgs::msg::Odometry &msg);
+    typedef void (*odometryCallbackType)(nav_msgs::msg::Odometry &msg);
 
     typedef void (*cameraCallbackType)(const sensor_msgs::msg::Image &msg, const std::string &sensor_name);
     typedef void (*cameraInfoCallbackType)(const sensor_msgs::msg::CameraInfo &msg, const std::string &sensor_name);

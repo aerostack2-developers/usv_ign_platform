@@ -53,6 +53,7 @@
 #include <as2_core/frame_utils/frame_utils.hpp>
 #include <as2_core/sensor.hpp>
 #include <as2_core/names/topics.hpp>
+#include <as2_core/tf_utils.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
@@ -75,6 +76,8 @@ namespace ignition_platform
         ~USVIgnitionPlatform(){};
 
     public:
+        static std::string namespace_;
+
         void configureSensors() override;
         bool ownSendCommand() override;
         bool ownSetArmingState(bool state) override;
@@ -85,7 +88,7 @@ namespace ignition_platform
         static void poseCallback(const geometry_msgs::msg::PoseStamped &msg);
 
         static std::unique_ptr<as2::sensors::Sensor<nav_msgs::msg::Odometry>> odometry_raw_estimation_ptr_;
-        static void odometryCallback(const nav_msgs::msg::Odometry &msg);
+        static void odometryCallback(nav_msgs::msg::Odometry &msg);
 
         static std::unordered_map<std::string, as2::sensors::Camera> callbacks_camera_;
         static void cameraCallback(const sensor_msgs::msg::Image &msg, const std::string &sensor_name);

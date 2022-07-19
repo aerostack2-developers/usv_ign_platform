@@ -39,7 +39,7 @@
 namespace ignition_platform
 {
     poseCallbackType IgnitionBridge::poseCallback_ = [](const geometry_msgs::msg::PoseStamped &msg){};
-    odometryCallbackType IgnitionBridge::odometryCallback_ = [](const nav_msgs::msg::Odometry &msg){};
+    odometryCallbackType IgnitionBridge::odometryCallback_ = [](nav_msgs::msg::Odometry &msg){};
 
     std::unordered_map<std::string, std::string> IgnitionBridge::callbacks_sensors_names_ = {};
     std::unordered_map<std::string, cameraCallbackType> IgnitionBridge::callbacks_camera_ = {};
