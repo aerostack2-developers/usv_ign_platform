@@ -31,6 +31,10 @@ def get_platform_node(context, *args, **kwargs):
         parameters=[
             LaunchConfiguration('controller_config_file'),
             {"control_modes_file": LaunchConfiguration('control_modes_file'),
+            "simulation_mode": True,
+            "mass": LaunchConfiguration('mass'),
+            "max_thrust": LaunchConfiguration('max_thrust'),
+            "min_thrust":  LaunchConfiguration('min_thrust'),
             "sensors": get_sensors(drone_namespace)
             }]
     )
@@ -50,6 +54,9 @@ def generate_launch_description():
     
     return LaunchDescription([
         DeclareLaunchArgument('drone_id', default_value=EnvironmentVariable('usv')),
+        DeclareLaunchArgument('mass', default_value='1.5'),
+        DeclareLaunchArgument('max_thrust', default_value='15.0'),
+        DeclareLaunchArgument('min_thrust', default_value='0.15'),
         DeclareLaunchArgument('control_modes_file', default_value=config),
         DeclareLaunchArgument('controller_config_file', default_value=controller_config_file),
         
