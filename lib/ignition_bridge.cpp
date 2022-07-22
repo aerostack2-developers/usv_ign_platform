@@ -1,6 +1,6 @@
 /*!*******************************************************************************************
  *  \file       ignition_bridge.cpp
- *  \brief      Implementation of an Ignition Gazebo bridge to ROS 
+ *  \brief      Implementation of an Ignition Gazebo bridge to ROS
  *  \authors    Miguel Fernández Cortizas
  *              Pedro Arias Pérez
  *              David Pérez Saura
@@ -38,206 +38,98 @@
 
 namespace ignition_platform
 {
-    poseCallbackType IgnitionBridge::poseCallback_ = [](const geometry_msgs::msg::PoseStamped &msg){};
-    odometryCallbackType IgnitionBridge::odometryCallback_ = [](nav_msgs::msg::Odometry &msg){};
 
-    std::unordered_map<std::string, std::string> IgnitionBridge::callbacks_sensors_names_ = {};
-    std::unordered_map<std::string, cameraCallbackType> IgnitionBridge::callbacks_camera_ = {};
-    std::unordered_map<std::string, cameraInfoCallbackType> IgnitionBridge::callbacks_camera_info_ = {};
-    std::unordered_map<std::string, laserScanCallbackType> IgnitionBridge::callbacks_laser_scan_ = {};
-    std::unordered_map<std::string, pointCloudCallbackType> IgnitionBridge::callbacks_point_cloud_ = {};
+  std::string IgnitionBridge::name_space_ = "";
+  odometryCallbackType IgnitionBridge::odometryCallback_ = [](nav_msgs::msg::Odometry &msg) {};
+  groundTruthCallbackType IgnitionBridge::groundTruthCallback_ = [](geometry_msgs::msg::Pose &msg) {};
 
-    IgnitionBridge::IgnitionBridge(std::string name_space)
+  IgnitionBridge::IgnitionBridge(std::string name_space, std::string world_name)
+  {
+    name_space_ = name_space;
+
+    // Initialize the ignition node
+    ign_node_ptr_ = std::make_shared<ignition::transport::Node>();
+
+    // Initialize subscribers
+    ign_node_ptr_->Subscribe("/model" + name_space + "/odometry",
+                             IgnitionBridge::ignitionOdometryCallback);
+
+    ign_node_ptr_->Subscribe("/world/" + world_name + "/pose/info",
+                             IgnitionBridge::ignitionGroundTruthCallback);
+
+    // Initialize publishers
+    ign_thrust_left_pub_ = ign_node_ptr_->Advertise<ignition::msgs::Double>(
+        "model" + name_space + ign_topic_command_thrust_left_);
+
+    ign_thrust_right_pub_ = ign_node_ptr_->Advertise<ignition::msgs::Double>(
+        "model" + name_space + ign_topic_command_thrust_right_);
+
+    ign_rot_left_pub_ = ign_node_ptr_->Advertise<ignition::msgs::Double>(
+        name_space + ign_topic_command_rot_left_);
+
+    ign_rot_right_pub_ = ign_node_ptr_->Advertise<ignition::msgs::Double>(
+        name_space + ign_topic_command_rot_right_);
+
+    return;
+  };
+
+  void IgnitionBridge::sendThrustMsg(const std_msgs::msg::Float64 &left_thrust, const std_msgs::msg::Float64 &right_thrust)
+  {
+      ignition::msgs::Double ign_left_msg;
+      ignition::msgs::Double ign_right_msg;
+      ros_ign_bridge::convert_ros_to_ign(left_thrust, ign_left_msg);
+      ros_ign_bridge::convert_ros_to_ign(right_thrust, ign_right_msg);
+      ign_thrust_left_pub_.Publish(ign_left_msg);
+      ign_thrust_right_pub_.Publish(ign_right_msg);
+      return;
+  };
+
+  void IgnitionBridge::sendRotationMsg(const std_msgs::msg::Float64 &left_rotation, const std_msgs::msg::Float64 &right_rotation)
+  {
+      ignition::msgs::Double ign_left_msg;
+      ignition::msgs::Double ign_right_msg;
+      ros_ign_bridge::convert_ros_to_ign(left_rotation, ign_left_msg);
+      ros_ign_bridge::convert_ros_to_ign(right_rotation, ign_right_msg);
+      ign_rot_left_pub_.Publish(ign_left_msg);
+      ign_rot_right_pub_.Publish(ign_right_msg);
+      return;
+  };
+
+  void IgnitionBridge::setOdometryCallback(odometryCallbackType callback)
+  {
+    odometryCallback_ = callback;
+    return;
+  };
+
+  void IgnitionBridge::ignitionOdometryCallback(const ignition::msgs::Odometry &msg)
+  {
+    nav_msgs::msg::Odometry odom_msg;
+    ros_ign_bridge::convert_ign_to_ros(msg, odom_msg);
+    odometryCallback_(odom_msg);
+    return;
+  };
+
+  void IgnitionBridge::setGroundTruthCallback(groundTruthCallbackType callback)
+  {
+    groundTruthCallback_ = callback;
+    return;
+  };
+
+  void IgnitionBridge::ignitionGroundTruthCallback(const ignition::msgs::Pose_V &msg)
+  {
+    // Remove firts element of name_space_
+    std::string name_space_2 = name_space_.substr(1);
+    for (auto const &p : msg.pose())
     {
-        name_space_ = name_space;
-
-        // Initialize the ignition node
-        ign_node_ptr_ = std::make_shared<ignition::transport::Node>();
-
-        // Initialize publishers
-        ign_thrust_left_pub_ = ign_node_ptr_->Advertise<ignition::msgs::Double>(
-            "model" + name_space + ign_topic_command_thrust_left_);
-
-        ign_thrust_right_pub_ = ign_node_ptr_->Advertise<ignition::msgs::Double>(
-            "model" + name_space + ign_topic_command_thrust_right_);
-
-        ign_rot_left_pub_ = ign_node_ptr_->Advertise<ignition::msgs::Double>(
-            name_space + ign_topic_command_rot_left_);
-
-        ign_rot_right_pub_ = ign_node_ptr_->Advertise<ignition::msgs::Double>(
-            name_space + ign_topic_command_rot_right_);
-
-        // Initialize subscribers
-        ign_node_ptr_->Subscribe(
-                "model" + name_space + ign_topic_sensor_pose_,
-                IgnitionBridge::ignitionPoseCallback);
-
-        ign_node_ptr_->Subscribe(
-                "model" + name_space + ign_topic_sensor_odometry_, 
-                IgnitionBridge::ignitionOdometryCallback);
-
+      if (p.name() == name_space_2)
+      {
+        geometry_msgs::msg::Pose pose;
+        ros_ign_bridge::convert_ign_to_ros(p, pose);
+        groundTruthCallback_(pose);
         return;
-    };
+      }
+    }
+    return;
+  };
 
-    void IgnitionBridge::sendThrustMsg(const std_msgs::msg::Float64 &left_thrust, const std_msgs::msg::Float64 &right_thrust)
-    {
-        ignition::msgs::Double ign_left_msg;
-        ignition::msgs::Double ign_right_msg;
-        ros_ign_bridge::convert_ros_to_ign(left_thrust, ign_left_msg);
-        ros_ign_bridge::convert_ros_to_ign(right_thrust, ign_right_msg);
-        ign_thrust_left_pub_.Publish(ign_left_msg);
-        ign_thrust_right_pub_.Publish(ign_right_msg);
-        return;
-    };
-
-    void IgnitionBridge::sendRotationMsg(const std_msgs::msg::Float64 &left_rotation, const std_msgs::msg::Float64 &right_rotation)
-    {
-        ignition::msgs::Double ign_left_msg;
-        ignition::msgs::Double ign_right_msg;
-        ros_ign_bridge::convert_ros_to_ign(left_rotation, ign_left_msg);
-        ros_ign_bridge::convert_ros_to_ign(right_rotation, ign_right_msg);
-        ign_rot_left_pub_.Publish(ign_left_msg);
-        ign_rot_right_pub_.Publish(ign_right_msg);
-        return;
-    };
-
-    void IgnitionBridge::setPoseCallback(poseCallbackType callback)
-    {
-        poseCallback_ = callback;
-        return;
-    };
-
-    void IgnitionBridge::ignitionPoseCallback(const ignition::msgs::Pose &msg)
-    {
-        geometry_msgs::msg::PoseStamped pose_msg;
-        ros_ign_bridge::convert_ign_to_ros(msg, pose_msg);
-        poseCallback_(pose_msg);
-        return;
-    };
-
-    void IgnitionBridge::setOdometryCallback(odometryCallbackType callback)
-    {
-        odometryCallback_ = callback;
-        return;
-    };
-
-    void IgnitionBridge::ignitionOdometryCallback(const ignition::msgs::Odometry &msg)
-    {
-        nav_msgs::msg::Odometry odom_msg;
-        ros_ign_bridge::convert_ign_to_ros(msg, odom_msg);
-        odometryCallback_(odom_msg);
-        return;
-    };
-
-    // Cameras
-    void IgnitionBridge::addSensor(
-        std::string world_name,
-        std::string name_space,
-        std::string sensor_name,
-        std::string link_name,
-        std::string sensor_type,
-        cameraCallbackType cameraCallback,
-        cameraInfoCallbackType cameraInfoCallback)
-    {
-        std::string camera_topic = "/world/" + world_name + "/model/" + name_space + "/model/" + sensor_name + "/link/" + link_name + "/sensor/" + sensor_type + "/image";
-        callbacks_camera_.insert(std::make_pair(camera_topic, cameraCallback));
-        callbacks_sensors_names_.insert(std::make_pair(camera_topic, sensor_name));
-        ign_node_ptr_->Subscribe(
-            camera_topic,
-            IgnitionBridge::ignitionCameraCallback);
-
-
-        std::string camera_info_topic = "/world/" + world_name + "/model/" + name_space + "/model/" + sensor_name + "/link/" + link_name + "/sensor/" + sensor_type + "/image";
-        callbacks_camera_info_.insert(std::make_pair(camera_info_topic, cameraInfoCallback));
-        callbacks_sensors_names_.insert(std::make_pair(camera_info_topic, sensor_name));
-        ign_node_ptr_->Subscribe(
-            camera_info_topic,
-            IgnitionBridge::ignitionCameraInfoCallback);
-        return;
-    };
-
-    void IgnitionBridge::ignitionCameraCallback(
-        const ignition::msgs::Image &msg, 
-        const ignition::transport::MessageInfo &msg_info)
-    {
-        sensor_msgs::msg::Image ros_image_msg;
-        ros_ign_bridge::convert_ign_to_ros(msg, ros_image_msg);
-        auto callback = callbacks_camera_.find(msg_info.Topic());
-        auto sensor_name = callbacks_sensors_names_.find(msg_info.Topic());
-        if (callback != callbacks_camera_.end())
-        {
-            callback->second(ros_image_msg, sensor_name->second);
-        }
-        return;
-    };
-
-    void IgnitionBridge::ignitionCameraInfoCallback(
-        const ignition::msgs::CameraInfo &msg, 
-        const ignition::transport::MessageInfo &msg_info)
-    {
-        sensor_msgs::msg::CameraInfo ros_camera_info_msg;
-        ros_ign_bridge::convert_ign_to_ros(msg, ros_camera_info_msg);
-        auto callback = callbacks_camera_info_.find(msg_info.Topic());
-        auto sensor_name = callbacks_sensors_names_.find(msg_info.Topic());
-        if (callback != callbacks_camera_info_.end())
-        {
-            callback->second(ros_camera_info_msg, sensor_name->second);
-        }
-        return;
-    };
-
-    void IgnitionBridge::addSensor(
-        std::string world_name,
-        std::string name_space,
-        std::string sensor_name,
-        std::string link_name,
-        std::string sensor_type,
-        laserScanCallbackType laserScanCallback,
-        pointCloudCallbackType pointCloudCallback)
-    {
-        std::string laser_scan_topic = "/world/" + world_name + "/model/" + name_space + "/model/" + sensor_name + "/link/" + link_name + "/sensor/" + sensor_type + "/scan";
-        callbacks_laser_scan_.insert(std::make_pair(laser_scan_topic, laserScanCallback));
-        callbacks_sensors_names_.insert(std::make_pair(laser_scan_topic, sensor_name));
-        ign_node_ptr_->Subscribe(
-            laser_scan_topic,
-            IgnitionBridge::ignitionLaserScanCallback);
-
-        std::string point_cloud_topic = "/world/" + world_name + "/model/" + name_space + "/model/" + sensor_name + "/link/" + link_name + "/sensor/" + sensor_type + "/scan/points";
-        callbacks_point_cloud_.insert(std::make_pair(point_cloud_topic, pointCloudCallback));
-        callbacks_sensors_names_.insert(std::make_pair(point_cloud_topic, sensor_name));
-        ign_node_ptr_->Subscribe(
-            point_cloud_topic,
-            IgnitionBridge::ignitionPointCloudCallback);
-        return;
-    };
-
-    void IgnitionBridge::ignitionLaserScanCallback(
-        const ignition::msgs::LaserScan &msg, 
-        const ignition::transport::MessageInfo &msg_info)
-    {
-        sensor_msgs::msg::LaserScan ros_laser_scan_msg;
-        ros_ign_bridge::convert_ign_to_ros(msg, ros_laser_scan_msg);
-        auto callback = callbacks_laser_scan_.find(msg_info.Topic());
-        auto sensor_name = callbacks_sensors_names_.find(msg_info.Topic());
-        if (callback != callbacks_laser_scan_.end())
-        {
-            callback->second(ros_laser_scan_msg, sensor_name->second);
-        }
-        return;
-    };
-
-    void IgnitionBridge::ignitionPointCloudCallback(
-        const ignition::msgs::PointCloudPacked &msg, 
-        const ignition::transport::MessageInfo &msg_info)
-    {
-        sensor_msgs::msg::PointCloud2 ros_point_cloud_msg;
-        ros_ign_bridge::convert_ign_to_ros(msg, ros_point_cloud_msg);
-        auto callback = callbacks_point_cloud_.find(msg_info.Topic());
-        auto sensor_name = callbacks_sensors_names_.find(msg_info.Topic());
-        if (callback != callbacks_point_cloud_.end())
-        {
-            callback->second(ros_point_cloud_msg, sensor_name->second);
-        }
-        return;
-    };
-}   
+} // namespace ignition_platform

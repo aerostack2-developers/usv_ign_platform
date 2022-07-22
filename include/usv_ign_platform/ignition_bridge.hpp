@@ -44,9 +44,12 @@
 #include <unordered_map>
 #include <as2_core/sensor.hpp>
 #include <as2_core/names/topics.hpp>
+#include <as2_core/frame_utils/frame_utils.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
+#include "sensor_msgs/msg/nav_sat_fix.hpp"
+#include <tf2_msgs/msg/tf_message.h>
 
 #include <ignition/transport.hh>
 #include <ignition/msgs.hh>
@@ -54,19 +57,13 @@
 
 namespace ignition_platform
 {
-    typedef void (*poseCallbackType)(const geometry_msgs::msg::PoseStamped &msg);
     typedef void (*odometryCallbackType)(nav_msgs::msg::Odometry &msg);
-
-    typedef void (*cameraCallbackType)(const sensor_msgs::msg::Image &msg, const std::string &sensor_name);
-    typedef void (*cameraInfoCallbackType)(const sensor_msgs::msg::CameraInfo &msg, const std::string &sensor_name);
-
-    typedef void (*laserScanCallbackType)(const sensor_msgs::msg::LaserScan &msg, const std::string &sensor_name);
-    typedef void (*pointCloudCallbackType)(const sensor_msgs::msg::PointCloud2 &msg, const std::string &sensor_name);
-
+    typedef void (*groundTruthCallbackType)(geometry_msgs::msg::Pose &msg);
+    
     class IgnitionBridge
     {
     public:
-        IgnitionBridge(std::string name_space = "/");
+        IgnitionBridge(std::string name_space = "/", std::string world_name = "");
         ~IgnitionBridge(){};
 
     public:
@@ -77,59 +74,26 @@ namespace ignition_platform
         ignition::transport::v11::Node::Publisher ign_rot_right_pub_;
 
     private:
-        std::string name_space_;
+        static std::string name_space_;
 
         const std::string &ign_topic_command_thrust_left_ = "/joint/left_engine_propeller_joint/cmd_thrust";
         const std::string &ign_topic_command_thrust_right_ = "/joint/right_engine_propeller_joint/cmd_thrust";
         const std::string &ign_topic_command_rot_left_ = "/left/thruster/joint/cmd_pos";
         const std::string &ign_topic_command_rot_right_ = "/right/thruster/joint/cmd_pos";
-        const std::string &ign_topic_sensor_pose_ = "/pose";
-        const std::string &ign_topic_sensor_odometry_ = "/odometry";
 
     public:
         void sendThrustMsg(const std_msgs::msg::Float64 &left_thrust, const std_msgs::msg::Float64 &right_thrust);
         void sendRotationMsg(const std_msgs::msg::Float64 &left_rotation, const std_msgs::msg::Float64 &right_rotation);
-
-        void setPoseCallback(poseCallbackType callback);
+        
         void setOdometryCallback(odometryCallbackType callback);
-
-        void addSensor(
-            std::string world_name,
-            std::string name_space,
-            std::string sensor_name,
-            std::string link_name,
-            std::string sensor_type,
-            cameraCallbackType cameraCallback,
-            cameraInfoCallbackType cameraInfoCallback);
-
-        void addSensor(
-            std::string world_name,
-            std::string name_space,
-            std::string sensor_name,
-            std::string link_name,
-            std::string sensor_type,
-            laserScanCallbackType laserScanCallback,
-            pointCloudCallbackType pointCloudCallback);
+        void setGroundTruthCallback(groundTruthCallbackType callback);
 
     private:
         // Ignition callbacks
-        static poseCallbackType poseCallback_;
-        static void ignitionPoseCallback(const ignition::msgs::Pose &msg);
         static odometryCallbackType odometryCallback_;
         static void ignitionOdometryCallback(const ignition::msgs::Odometry &msg);
-
-
-        static std::unordered_map<std::string, std::string> callbacks_sensors_names_;
-
-        static void ignitionCameraCallback(const ignition::msgs::Image &msg, const ignition::transport::MessageInfo &_info);
-        static std::unordered_map<std::string, cameraCallbackType> callbacks_camera_;
-        static void ignitionCameraInfoCallback(const ignition::msgs::CameraInfo &msg, const ignition::transport::MessageInfo &_info);
-        static std::unordered_map<std::string, cameraInfoCallbackType> callbacks_camera_info_;
-
-        static void ignitionLaserScanCallback(const ignition::msgs::LaserScan &msg, const ignition::transport::MessageInfo &_info);
-        static std::unordered_map<std::string, laserScanCallbackType> callbacks_laser_scan_;
-        static void ignitionPointCloudCallback(const ignition::msgs::PointCloudPacked &msg, const ignition::transport::MessageInfo &_info);
-        static std::unordered_map<std::string, pointCloudCallbackType> callbacks_point_cloud_;
+        static groundTruthCallbackType groundTruthCallback_;
+        static void ignitionGroundTruthCallback(const ignition::msgs::Pose_V &msg);
     };
 }
 
