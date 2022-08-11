@@ -56,12 +56,8 @@
 #include <as2_core/tf_utils.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
-#include <nav_msgs/msg/odometry.hpp>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-#include <image_transport/image_transport.hpp>
 #include <std_msgs/msg/float64.hpp>
 
-#include "ignition_bridge.hpp"
 
 #define CMD_FREQ 10 // miliseconds
 
@@ -76,9 +72,6 @@ namespace ignition_platform
         ~USVIgnitionPlatform(){};
 
     public:
-        static std::shared_ptr<IgnitionBridge> ignition_bridge_;
-        static std::string namespace_;
-
         void configureSensors() override;
         bool ownSendCommand() override;
         bool ownSetArmingState(bool state) override;
@@ -91,23 +84,12 @@ namespace ignition_platform
         rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr left_pos_pub_;
         rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr right_pos_pub_;
 
-        rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
-        static std::unique_ptr<sensor_msgs::msg::Imu> imu_msg_;
-        void imuCallback(const sensor_msgs::msg::Imu &msg);
-
-        // rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
-        static rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr ground_truth_pose_pub_;
-        static rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr ground_truth_twist_pub_;
-
-        static std::unique_ptr<as2::sensors::Sensor<nav_msgs::msg::Odometry>> odometry_raw_estimation_ptr_;
-        static void odometryCallback(nav_msgs::msg::Odometry &msg);
-
-        static std::unique_ptr<as2::sensors::Sensor<geometry_msgs::msg::Pose>> ground_truth_ptr_;
-        static void groundTruthCallback(geometry_msgs::msg::Pose &msg);
+        // Subscribers
+        rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_sub_;
+        void poseCallback(const geometry_msgs::msg::PoseStamped &msg);
 
     private:
-        static bool odometry_info_received_;
-        static bool imu_info_received_;
+        bool odometry_info_received_;
         bool parameters_read;
         as2_msgs::msg::ControlMode control_in_;
 
@@ -122,7 +104,7 @@ namespace ignition_platform
         Eigen::Vector3d yaw_ang_mat_ = Eigen::Vector3d::Identity();
         double yaw_accum_error_ = 0.0;
 
-        static geometry_msgs::msg::Quaternion self_orientation_;
+        geometry_msgs::msg::Quaternion self_orientation_;
         Eigen::Vector2d motor_thrust_cmd_ = Eigen::Vector2d::Zero();
         Eigen::Vector2d motor_pos_cmd_ = Eigen::Vector2d::Zero();
 

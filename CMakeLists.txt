@@ -17,56 +17,20 @@ set(PROJECT_DEPENDENCIES
   ament_cmake
   rclcpp
   std_msgs
-  sensor_msgs
   geometry_msgs
-  nav_msgs
   Eigen3
   as2_core
-  ros_ign_bridge
-  ros_ign_gazebo
-  tf2_geometry_msgs
-  image_transport
 )
 
 foreach(DEPENDENCY ${PROJECT_DEPENDENCIES})
   find_package(${DEPENDENCY} REQUIRED)
 endforeach()
 
-# Citadel and foxy
-if("$ENV{IGNITION_VERSION}" STREQUAL "citadel" AND "$ENV{ROS_DISTRO}" STREQUAL "foxy")
-  find_package(ignition-gazebo3 REQUIRED)
-  set(IGN_GAZEBO_VER ${ignition-gazebo3_VERSION_MAJOR})
-
-  find_package(ignition-transport8 REQUIRED)
-  set(IGN_TRANSPORT_VER ${ignition-transport8_VERSION_MAJOR})
-
-  find_package(ignition-msgs5 REQUIRED)
-  set(IGN_MSGS_VER ${ignition-msgs5_VERSION_MAJOR})
-
-  message(STATUS "Compiling against Ignition Citadel")
-  add_definitions(-DIGNITION_CITADEL)
-# Fortress and galactic or Fortress and foxy
-else()
-  find_package(ignition-gazebo6 REQUIRED)
-  set(IGN_GAZEBO_VER ${ignition-gazebo6_VERSION_MAJOR})
-
-  find_package(ignition-transport11 REQUIRED)
-  set(IGN_TRANSPORT_VER ${ignition-transport11_VERSION_MAJOR})
-
-  find_package(ignition-msgs8 REQUIRED)
-  set(IGN_MSGS_VER ${ignition-msgs8_VERSION_MAJOR})
-
-  message(STATUS "Compiling against Ignition Fortress")
-  add_definitions(-DIGNITION_FORTRESS)
-endif()
-
 set(SOURCE_CPP_FILES 
-  lib/ignition_bridge.cpp
   src/${NODE_NAME}.cpp
 )
 set(HEADER_HPP_FILES
   include/${NODE_NAME}/${NODE_NAME}.hpp
-  include/${NODE_NAME}/ignition_bridge.hpp
 )
 
 include_directories(
@@ -78,31 +42,11 @@ include_directories(
 add_executable(${PROJECT_NAME}_node src/${NODE_NAME}_main.cpp ${SOURCE_CPP_FILES} ${HEADER_HPP_FILES})
 ament_target_dependencies(${PROJECT_NAME}_node 
   rclcpp 
-  sensor_msgs 
   std_msgs
-  std_srvs
-  nav_msgs
   as2_core
   as2_msgs
   geometry_msgs
-  image_transport
-  ros_ign_bridge
-  ros_ign_gazebo
 )
-
-if("$ENV{IGNITION_VERSION}" STREQUAL "citadel" AND "$ENV{ROS_DISTRO}" STREQUAL "foxy")
-  ament_target_dependencies(${PROJECT_NAME}_node 
-    ignition-transport8
-    ignition-msgs5
-  )
-
-else()
-  ament_target_dependencies(${PROJECT_NAME}_node 
-    ignition-transport11
-    ignition-msgs8
-  )
-
-endif()
 
 if(BUILD_TESTING)
   find_package(ament_cmake_cpplint REQUIRED)
